@@ -1,14 +1,14 @@
 //------------------------------------------------------------------------------------------------------------------
-// NAME: Waterbot
+// NAME: waterbot.ino
 // AUTH: Ryan McCartney
 // DATE: 15th December 2018
-// DESC: Microsubmersible pump and servo motor platn watering system
-// NOTE: GNU License
+// DESC: Microsubmersible pump and servo motor plant watering system
+// NOTE: GNU General Public License (GPL)
 //------------------------------------------------------------------------------------------------------------------
 
 //Pin Definitions
-#define servoPin 24
-#define pump 22
+#define servoPin 2
+#define pump 3
 
 //Receive Data Variables
 String inputString = "";
@@ -26,7 +26,9 @@ Servo servo;
 int plant[] = {0, 20, 40, 60, 80, 100, 120, 140, 160, 180};
 
 //Pump flowrate for quantity measurment (ml/s)
-float flowrate = 10.00;
+float flowrate = 10.00; //in ml per second
+float capacity = 2000; //in ml
+int spinup = 500; //in ms
 
 //------------------------------------------------------------------------------------------------------------------
 //Setup Code initialising waterbot on powerup
@@ -54,14 +56,21 @@ void setup() {
 //------------------------------------------------------------------------------------------------------------------
 //Plant watering function
 //------------------------------------------------------------------------------------------------------------------
-bool water(int plant, float quantity) {
+bool water(int plant, int quantity) {
 
   bool status = false;
 
-  int dispenseTime = int((quantity / flowrate) * 1000);
+  unsigned long dispenseTime = (quantity / flowrate) * 1000;
+  dispenseTime = dispenseTime + spinup;
+  
+  Serial.print("Dispensing Time = ");
+  Serial.print(dispenseTime);
+  Serial.println("ms");
 
   //Move servo to plant
   servo.write(plant);
+
+  delay(500);
 
   //Turn on pump to begin watering
   digitalWrite(pump, HIGH);
@@ -73,7 +82,6 @@ bool water(int plant, float quantity) {
 
   return status;
 }
-
 
 //------------------------------------------------------------------------------------------------------------------
 //When Serial input is made this function parses the contents
@@ -94,11 +102,23 @@ bool csvParse(String data) {
   // Copy it over
   data.toCharArray(dataChars, dataLength);
 
+  //Clear existing commands
+  memset(commands, NULL, sizeof(commands));
+
   //Create the the character array (the buffer)
   for (int i = 0; i < dataLength; i++) {
 
     //If the incoming character is a comma then it must indicate the end of a variable
     if (dataChars[i] == delimiter) {
+
+      //Some Debug Prints
+      /*
+        Serial.print("Variable Command number ");
+        Serial.print(variable);
+        Serial.print(" = ");
+        Serial.println(commands[variable]);
+      */
+
       variable++;
       status = true;
     }
@@ -124,13 +144,41 @@ void loop() {
     //Reset Serial
     inputString = "";
     stringComplete = false;
+
+
+    if (status == true) {
+
+      //Commands for special statements
+      switch ((commands[2].toInt())) {
+        case 0:
+          Serial.println("STATUS: Dispensing water");
+          status = water(plant[(commands[0].toInt())], commands[1].toInt());
+          break;
+
+        case 1:
+          Serial.println("STATUS: Sweeping");
+
+          for (int pos = plant[0]; pos <= plant[9]; pos += 1) {
+            // in steps of 1 degree
+            servo.write(pos);
+            delay(5);
+          }
+
+          for (int pos = plant[9]; pos >= plant[0]; pos -= 1) {
+            servo.write(pos);
+            delay(5);
+          }
+          break;
+
+        case 2:
+          Serial.println("STATUS: Emptying Water Tank");
+          break;
+      }
+
+    }
   }
 
-  if (status == true) {
 
-    status = water(plant[(commands[0].toInt())],commands[1].toInt());
-
-  }
 }
 
 //------------------------------------------------------------------------------------------------------------------
